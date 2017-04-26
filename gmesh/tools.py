@@ -13,7 +13,60 @@ from tqdm import tqdm
 from . import data
 
 
+<<<<<<< HEAD
 def structure(fn, out, coords, nums, level=0, store_basis=True, fprefix=''):
+=======
+plt.switch_backend('Qt5Agg')
+
+
+def transform(fn, normal, basept, auto, out):
+    vtk = importlib.import_module('vtk')
+    f = next(data.read(fn))
+
+    if not normal and not basept:
+        polydata = f.reader.GetOutput()
+        arr = np.array([polydata.GetPoint(i) for i in range(polydata.GetNumberOfPoints())])
+        arr = arr - arr.mean(axis=0)
+        w, v = np.linalg.eig(np.dot(arr.T, arr))
+        min_idx = w.argmin()
+        normal = v[:,min_idx]
+        basept = polydata.GetPoint(0)
+
+        if not auto:
+            print('Normal: {}', normal)
+            print('Base: {}', basept)
+
+            return
+
+    normal = np.array(normal)
+    basept = np.array(basept)
+
+    transform = vtk.vtkTransform()
+    transform.PostMultiply()
+    transform.Translate(*(-p for p in basept))
+
+    tgt = np.array([0, 1, 0])
+    if np.dot(normal, tgt) < 0:
+        normal = -normal
+    axis = np.cross(normal, tgt)
+    axis /= np.linalg.norm(axis)
+    angle = np.arccos(np.dot(normal, tgt)) * 180 / np.pi
+    print(angle, axis, fn)
+    transform.RotateWXYZ(angle, *axis)
+
+    transformfilter = vtk.vtkTransformPolyDataFilter()
+    transformfilter.SetInputConnection(f.reader.GetOutputPort())
+    transformfilter.SetTransform(transform)
+    transformfilter.Update()
+
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(out)
+    writer.SetInputConnection(transformfilter.GetOutputPort())
+    writer.Write()
+
+
+def structure(fn, out, coords, nums, level=0, store_basis=True, fprefix='', tolerance=None):
+>>>>>>> b280573f73c1407343a1b1a2f241266a29d3cb68
     vtk = importlib.import_module('vtk')
 
     f = next(data.read(fn))
@@ -45,6 +98,11 @@ def structure(fn, out, coords, nums, level=0, store_basis=True, fprefix=''):
     probefilter = vtk.vtkProbeFilter()
     probefilter.SetSourceConnection(f.reader.GetOutputPort())
     probefilter.SetInputData(new_grid)
+
+    if tolerance:
+        probefilter.SetComputeTolerance(False)
+        probefilter.SetTolerance(tolerance)
+
     probefilter.Update()
     structgrid = probefilter.GetStructuredGridOutput()
 
@@ -182,16 +240,13 @@ def reduce(fields, filenames, out):
         mode = np.zeros(cshape)
         for i, vv in enumerate(v[:,k]):
             mode += vv * coeffs[i]
+        mode /= np.sqrt(w[k])
         fieldname = 'mode{:02}'.format(k+1)
         res.save_coeffs(fieldname, 'basis', 0, 0, mode, transpose=True)
         res.set_meta(fieldname, 'energy', w[k] / np.trace(data_mx))
 
-    plt.plot(np.cumsum(w) / np.trace(data_mx) * 100, linewidth=2, marker='o')
-    plt.plot([0, v.shape[-1]-1], [95, 95], '--')
-    plt.show()
 
-
-def spectrum(filename, out):
+def spectrum(filename, out, plot=False):
     obj = next(data.read(filename))
     nmodes = len(list(obj.fields))
 
@@ -205,6 +260,11 @@ def spectrum(filename, out):
     with open(out, 'w') as f:
         for s, c in zip(spec, cspec):
             f.write('{} {}\n'.format(s, c))
+
+    if plot:
+        plt.plot(cspec, linewidth=2, marker='o')
+        plt.plot([0, len(spec) - 1], [0.95, 0.95], '--')
+        plt.show()
 
 
 def avg(filename, field, varying=None, t=0):

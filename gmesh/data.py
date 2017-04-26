@@ -232,11 +232,22 @@ class NetCDFFile:
         self.path = path.Path(np.vstack((lat, lon)).T)
         self.pts = list(zip(lon, lat))
 
+        self.nc4 = data
+        self.time = 0
+        self.fields = ['x_wind_10m', 'y_wind_10m']
+
     def contains(self, lat, lon):
         return self.path.contains_point((lat, lon))
 
     def compute(self):
-        raise NotImplementedError('Compute for NetCDF not implemented')
+        self.lats = self.nc4['latitude'][:]
+        self.lons = self.nc4['longitude'][:]
+        self.data = self.nc4[self.fields[0]][self.time, 0, :, :]
+        if len(self.fields) > 1:
+            self.data = self.data ** 2
+            for f in self.fields[1:]:
+                self.data += self.nc4[f][self.time, 0, :, :] ** 2
+            self.data = np.sqrt(self.data)
 
 
 class VTKFile:

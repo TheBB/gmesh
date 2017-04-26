@@ -1,4 +1,5 @@
 from collections import OrderedDict, namedtuple
+from itertools import product
 import matplotlib as mpl
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -6,6 +7,7 @@ import matplotlib.cm
 from mpl_toolkits.basemap import Basemap
 import numpy as np
 from operator import methodcaller
+from os.path import exists
 from PyQt5 import QtCore, QtGui, QtWidgets
 import sys
 
@@ -53,19 +55,26 @@ PROJECTIONS = OrderedDict([
     # ('vandg', Projection('vandg', 'van der Grinten', 'degrees')),
 ])
 
-CONTOURS = [1, 100, 200, 300, 400, 500,
-            700, 900, 1100, 1300, 1500,
-            1800, 2100, 2400, 2700, 3000]
+CONTOURS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 20, 24]
 
 
 class BlockDrawer:
 
-    def __init__(self, block):
+    def __init__(self, block, draw, selected):
         self.block = block
-        self.selected = False
-        self.draw_field = False
+        self.selected = selected
+        self.draw_field = draw
         self.line = None
         self.contour = None
+
+    def next_time(self):
+        self.block.time += 1
+
+    def prev_time(self):
+        self.block.time -= 1
+
+    def set_field(self, field):
+        self.block.fields = field.split()
 
     def draw(self, m, clear=False):
         coords = [m(*p) for p in self.block.pts]
@@ -93,10 +102,10 @@ class BlockDrawer:
         if self.draw_field:
             self.block.compute()
             if clear or not self.contour:
-                self.contour = m.contourf(self.block.lons, self.block.lats,
-                                          self.block.data,
-                                          latlon=True, zorder=5, alpha=0.8,
-                                          cmap='terrain', levels=CONTOURS)
+                self.contour = m.contourf(
+                    self.block.lons, self.block.lats, self.block.data,
+                    latlon=True, zorder=5, alpha=0.6,
+                )
 
     def click(self, lon, lat):
         self.selected = self.block.contains(lat, lon)
@@ -105,13 +114,13 @@ class BlockDrawer:
 
 class MPLCanvas(FigureCanvas):
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, parent=None, width=20, height=16, dpi=200):
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
         fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
 
-        self.scale = 2.5e6
-        self.pos = (10.39, 63.43)
+        self.scale = 2.7e6
+        self.pos = (15.00, 63.06)
         self._projection = 'aeqd'
         self._resolution = 'c'
         self.blocks = []
@@ -127,6 +136,8 @@ class MPLCanvas(FigureCanvas):
         self.updateGeometry()
 
         self.compute()
+
+        self.fig = fig
 
     @property
     def projection(self):
@@ -146,8 +157,11 @@ class MPLCanvas(FigureCanvas):
         self._resolution = value
         self.full_refresh()
 
-    def add_block(self, block):
-        self.blocks.append(BlockDrawer(block))
+    def add_block(self, block, draw=False, selected=False):
+        self.blocks.append(BlockDrawer(block, draw, selected))
+
+    def remove_blocks(self):
+        self.blocks = []
 
     def compute(self):
         self.axes.clear()
@@ -207,6 +221,25 @@ class MPLCanvas(FigureCanvas):
         for b in self.selected:
             b.draw_field = True
         self.partial_refresh()
+
+    def delete_blocks(self):
+        self.blocks = [b for b in self.blocks if not b in self.selected]
+        self.full_refresh()
+
+    def next_time(self):
+        for b in self.selected:
+            b.next_time()
+        self.full_refresh()
+
+    def prev_time(self):
+        for b in self.selected:
+            b.prev_time()
+        self.full_refresh()
+
+    def set_field(self, field):
+        for b in self.selected:
+            b.set_field(field)
+        self.full_refresh()
 
     def wheelEvent(self, event):
         self.zoom(-1 if event.angleDelta().y() > 0 else 1)
@@ -317,12 +350,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.canvas.partial_refresh()
 
     def open_net(self):
-        # fn, ok = QtWidgets.QInputDialog.getText(self, 'Open network content', 'URL')
-        # if ok and fn:
-        fn = 'http://thredds.met.no/thredds/dodsC/fsiwt/AM25_Coupled2W_2015/netcdf_full/AM25_Coupled2W_2015011000_full.nc'
-        for block in data.read(fn):
-            self.canvas.add_block(block)
-        self.canvas.partial_refresh()
+        fn, ok = QtWidgets.QInputDialog.getText(self, 'Open network content', 'URL')
+        if ok and fn:
+            for block in data.read(fn):
+                self.canvas.add_block(block)
+            self.canvas.partial_refresh()
 
     def read_file(self, *args, **kwargs):
         print(args, kwargs)
@@ -332,6 +364,16 @@ class MainWindow(QtWidgets.QMainWindow):
             self.close()
         elif event.text() == 'c':
             self.canvas.block_options()
+        elif event.text() == 'd':
+            self.canvas.delete_blocks()
+        elif event.text() == 'j':
+            self.canvas.next_time()
+        elif event.text() == 'k':
+            self.canvas.prev_time()
+        elif event.text() == 'f':
+            field, ok = QtWidgets.QInputDialog.getText(self, 'Show field', 'Field')
+            if ok and field:
+                self.canvas.set_field(field)
         elif event.text() in {'+', '='}:
             self.canvas.zoom(-1)
         elif event.text() == '-':

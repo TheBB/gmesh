@@ -13,6 +13,23 @@ def main():
 
 
 @main.command()
+@click.option('--out', type=str, required=False)
+@click.option('--normal', type=float, nargs=3, required=False)
+@click.option('--base', type=float, nargs=3, required=False)
+@click.option('--auto/--no-auto', default=False)
+@click.argument('filenames', type=str, nargs=-1)
+def transform(filenames, normal, base, auto, out):
+    tools = importlib.import_module('gmesh.tools')
+
+    for f in filenames:
+        this_out = out
+        if this_out is None:
+            bb, ext = splitext(f)
+            this_out = '{}_trf{}'.format(bb, ext)
+        tools.transform(f, normal, base, auto, this_out)
+
+
+@main.command()
 @click.option('--zval', type=float)
 @click.option('--yval', type=float)
 @click.option('--xval', type=float)
@@ -28,10 +45,11 @@ def main():
 @click.option('--out', type=str, required=True)
 @click.option('--fprefix', type=str, default='')
 @click.option('--timedirs/--no-timedirs', default=False)
+@click.option('--tolerance', type=float, default=None)
 @click.option('--step', type=int, default=1)
 @click.argument('filenames', type=str, nargs=-1)
 def structure(filenames, timedirs, step, out, fprefix, nx, ny, nz,
-              xval, yval, zval, xmin, ymin, zmin, xmax, ymax, zmax):
+              xval, yval, zval, xmin, ymin, zmin, xmax, ymax, zmax, tolerance):
     """Turn an unstructured VTK into a structured one."""
     xs = [xval, xval] if xval is not None else [xmin, xmax]
     ys = [yval, yval] if yval is not None else [ymin, ymax]
@@ -56,19 +74,20 @@ def structure(filenames, timedirs, step, out, fprefix, nx, ny, nz,
                 print('Level', level, fn, '->', out)
                 tools.structure(fn, out, [xs, ys, zs], [nx, ny, nz],
                                 level=level, store_basis=first,
-                                fprefix=fprefix)
+                                fprefix=fprefix, tolerance=tolerance)
                 first = False
 
         basename, ext = splitext(out)
         if ext in {'.hdf5', '.h5'}:
             data = importlib.import_module('gmesh.data')
             f = data.IFEMFile(out)
-            f.set_timestep((t_end - t_start) / (ntimes - 1), t_start, t_end)
+            if ntimes > 1:
+                f.set_timestep((t_end - t_start) / (ntimes - 1), t_start, t_end)
 
     else:
         assert len(filenames) == 1
         print(filenames[0], '->', out)
-        tools.structure(filenames[0], out, [xs, ys, zs], [nx, ny, nz], fprefix=fprefix)
+        tools.structure(filenames[0], out, [xs, ys, zs], [nx, ny, nz], fprefix=fprefix, tolerance=tolerance)
 
 
 @main.command()
@@ -83,14 +102,15 @@ def reduce(fields, filenames, out):
 
 @main.command()
 @click.option('--out', type=str, default=None)
+@click.option('--plot/--no-plot', default=False)
 @click.argument('filename', type=str)
-def spectrum(filename, out):
+def spectrum(filename, out, plot):
     """Dimensional reduction analysis."""
     if out is None:
         basename, _ = splitext(filename)
         out = basename + '.csv'
     tools = importlib.import_module('gmesh.tools')
-    tools.spectrum(filename, out)
+    tools.spectrum(filename, out, plot)
 
 
 @main.command()
