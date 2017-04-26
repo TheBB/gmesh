@@ -13,9 +13,6 @@ from tqdm import tqdm
 from . import data
 
 
-plt.switch_backend('Qt5Agg')
-
-
 def structure(fn, out, coords, nums, level=0, store_basis=True, fprefix=''):
     vtk = importlib.import_module('vtk')
 
