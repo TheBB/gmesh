@@ -13,6 +13,9 @@ from tqdm import tqdm
 from . import data
 
 
+<<<<<<< HEAD
+def structure(fn, out, coords, nums, level=0, store_basis=True, fprefix=''):
+=======
 plt.switch_backend('Qt5Agg')
 
 
@@ -63,6 +66,7 @@ def transform(fn, normal, basept, auto, out):
 
 
 def structure(fn, out, coords, nums, level=0, store_basis=True, fprefix='', tolerance=None):
+>>>>>>> b280573f73c1407343a1b1a2f241266a29d3cb68
     vtk = importlib.import_module('vtk')
 
     f = next(data.read(fn))
